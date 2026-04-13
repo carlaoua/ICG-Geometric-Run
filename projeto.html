@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Geometric Run</title>
+  <style>
+    * { margin: 0; padding: 0; }
+    body { overflow: hidden; background: #000; }
+
+    #hint {
+      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      color: rgba(255,255,255,0.7); font: 13px/1 sans-serif;
+      background: rgba(0,0,0,0.5); padding: 8px 16px; border-radius: 8px;
+      pointer-events: none;
+      display: none; 
+    }
+
+    /* ── MENU DE PAUSA ── */
+    #pause-menu {
+      display: none;
+      position: fixed; inset: 0; z-index: 50;
+      flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(20px);
+    }
+    #pause-menu h1 { color: #fff; font: bold 42px sans-serif; }
+    .pause-btn {
+      width: 220px; padding: 14px; border-radius: 12px;
+      font: bold 16px sans-serif; cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(255,255,255,0.12); color: #fff;
+      transition: background 0.2s, transform 0.15s;
+    }
+    .pause-btn:hover  { background: rgba(255,255,255,0.22); transform: scale(1.04); }
+    #btn-restart { border-color: rgba(255,100,100,0.4); }
+
+    /* ── MENU DE PERSONALIZAÇÃO (ecrã inicial) ── */
+    #char-menu {
+      display: flex;
+      position: fixed; inset: 0; z-index: 60;
+      flex-direction: column; align-items: center; 
+      padding-top: 30px;
+    }
+    #char-menu h1 {
+      color: #fff; font: bold 48px sans-serif;
+      margin-bottom: 4px; letter-spacing: 4px; text-shadow: 0 2px 16px #000a;
+    }
+    #char-menu h3 {
+      color: #fff; font: 32px sans-serif;
+      margin-bottom: 8px; letter-spacing: 2px; text-shadow: 0 2px 12px #000a;
+    }
+    #btn-play {
+      margin-top: 22px;
+      width: 260px; padding: 16px; border-radius: 14px;
+      font: bold 18px sans-serif; cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.3);
+      background: rgba(34,180,100,0.85); color: #fff;
+      transition: background 0.2s, transform 0.15s;
+      box-shadow: 0 4px 24px rgba(34,180,100,0.4);
+    }
+    #btn-play:hover { background: rgba(34,200,110,1); transform: scale(1.04); }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+      "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.19/+esm"
+    }
+  }
+  </script>
+</head>
+<body>
+
+<!-- ── MENU DE PERSONALIZAÇÃO (aparece primeiro) ── -->
+<div id="char-menu">
+  <h1>GEOMETRIC RUN</h1>
+  <h3>✏️ Personalizar Personagem</h3>
+  <button id="btn-play">▶ Jogar!</button>
+</div>
+
+<!-- ── MENU DE PAUSA ── -->
+<div id="pause-menu">
+  <h1>⏸ PAUSA</h1>
+  <button class="pause-btn" id="btn-resume">▶ Retomar</button>
+  <button class="pause-btn" id="btn-restart">↺ Reiniciar</button>
+</div>
+
+<div id="hint">Clica para capturar o rato · WASD movem · Shift corre · Espaço salta</div>
+
+<script type="module">
+  import * as THREE from 'three';
+  import GUI from 'lil-gui';
+
+  // ── CONSTANTES ───────────────────────────────────────────────
+  const GRAVITY     = -20;
+  const JUMP_VEL    =  7;
+  const MOVE_SPEED  =  5;
+  const RUN_SPEED   =  8;
+  const CAM_HEIGHT  =  2.5;
+  const CAM_LERP    =  0.1;
+  const SENS_H      =  0.008;
+  const SENS_V      =  0.008;
+  const STEP_HEIGHT =  0.6;
+
+  // ── RENDERER ─────────────────────────────────────────────────
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  document.body.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87ceeb);
+
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+  sun.position.set(10, 20, 10);
+  sun.castShadow = true;
+  scene.add(sun);
+
+  // ── CHÃO ─────────────────────────────────────────────────────
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(150, 200),
+    new THREE.MeshLambertMaterial({ color: 0x44aa44 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+  // ── PLATAFORMAS ───────────────────────────────────────────────
+  const platforms = [];
+  function addPlatform(x, y, z, w, d, h, color) {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      new THREE.MeshLambertMaterial({ color })
+    );
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    platforms.push({
+      minX: x-w/2, maxX: x+w/2,
+      minZ: z-d/2, maxZ: z+d/2,
+      topY: y + h/2,
+      baseY: y - h/2        
+    });
+  }
+  const white  = 0xffffff;
+  const purple = 0xaa77ff;
+  //(esquerda/direita, y, frente/trás, esticar, esticar, altura, cor)
+  addPlatform(0,   2.5,   5,  10, 1,  5,  white);
+  addPlatform(5,   2.5,   2,   1, 7,  5,  white);
+  addPlatform(-5,  2.5,   2,   1, 7,  5,  white);
+  addPlatform(6,   3,    -2,   1, 1,  6,  white);
+  addPlatform(7,   3.5,  -3,   1, 1,  7,  white);
+  addPlatform(8,   4,    -4,   1, 1,  8,  white);
+  addPlatform(9,   4.5,  -5,   1, 1,  9,  white);
+  addPlatform(10,  5,    -6,   1, 1, 10,  white);
+  addPlatform(43,  5.5,  -7,  65, 1, 11,  white);
+  addPlatform(-6,  3,    -2,   1, 1,  6,  white);
+  addPlatform(-7,  3.5,  -3,   1, 1,  7,  white);
+  addPlatform(-8,  4,    -4,   1, 1,  8,  white);
+  addPlatform(-9,  4.5,  -5,   1, 1,  9,  white);
+  addPlatform(-10, 5,    -6,   1, 1, 10,  white);
+  addPlatform(-43, 5.5,  -7,  65, 1, 11,  white);
+  // ── BRANCO ───────────────────────────────────────────────────
+  addPlatform(0,   0.5,  -10,  5, 5,  1,  white);
+  addPlatform(0,   1,    -17,  5, 5,  2,  white);
+  addPlatform(5,   1.5,  -23,  5, 5,  3,  white);
+  addPlatform(-1.5,  2,    -29,  5, 5,  4,  white);
+  addPlatform(-7, 2.5,  -36,  5, 5,  5,  white);
+  addPlatform(-7, 3,    -43,  5, 5,  6,  white);
+  addPlatform(-3,  3.5,  -50,  5, 5,  7,  white);
+  addPlatform(1,  4,    -57,  5, 5,  8,  white);
+  addPlatform(1,  4.5,    -65,  5, 5,  9,  white);
+  addPlatform(-3,  20,   -80,  5, 5, 40,  white);
+  addPlatform(-3,  8,   -75,  5, 5, 1,  white);
+  addPlatform(2,  9,   -80,  5, 5, 1,  white);
+  addPlatform(-3,  10,   -85,  5, 5, 1,  white);
+  addPlatform(-8,  11,   -80,  5, 5, 1,  white);
+
+
+  // ── JOGADOR ───────────────────────────────────────────────────
+  const playerGroup = new THREE.Group();
+  scene.add(playerGroup);
+
+  const matBody = new THREE.MeshLambertMaterial({ color: 0x2255ff });
+  const matSkin = new THREE.MeshLambertMaterial({ color: 0xffcc88 });
+  const matDark = new THREE.MeshLambertMaterial({ color: 0x112288 });
+  const Dark = new THREE.MeshLambertMaterial({ color: 0x111111 });
+
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.9, 16), matBody);
+  body.position.y = 0.9;
+  body.castShadow = true;
+  playerGroup.add(body);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 16), matSkin);
+  head.position.y = 1.65;
+  head.castShadow = true;
+  playerGroup.add(head);
+
+  const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), Dark);
+  eye1.position.set(0.10, 1.66, -0.24);
+  playerGroup.add(eye1);
+
+  const eye2 = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), Dark);
+  eye2.position.set(-0.10, 1.66, -0.24);
+  playerGroup.add(eye2);
+
+  const pivotArmL = new THREE.Group();
+  pivotArmL.position.set(-0.40, 1.3, 0);
+  playerGroup.add(pivotArmL);
+  const meshArmL = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.65, 8), matBody);
+  meshArmL.position.y = -0.32;
+  meshArmL.castShadow = true;
+  pivotArmL.add(meshArmL);
+
+  const pivotArmR = new THREE.Group();
+  pivotArmR.position.set(0.40, 1.3, 0);
+  playerGroup.add(pivotArmR);
+  const meshArmR = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.65, 8), matBody);
+  meshArmR.position.y = -0.32;
+  meshArmR.castShadow = true;
+  pivotArmR.add(meshArmR);
+
+  const pivotLegL = new THREE.Group();
+  pivotLegL.position.set(-0.15, 0.45, 0);
+  playerGroup.add(pivotLegL);
+  const meshLegL = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.5, 8), matDark);
+  meshLegL.position.y = -0.2;
+  meshLegL.castShadow = true;
+  pivotLegL.add(meshLegL);
+
+  const pivotLegR = new THREE.Group();
+  pivotLegR.position.set(0.15, 0.45, 0);
+  playerGroup.add(pivotLegR);
+  const meshLegR = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.5, 8), matDark);
+  meshLegR.position.y = -0.2;
+  meshLegR.castShadow = true;
+  pivotLegR.add(meshLegR);
+
+  // ── CÂMARA DE PREVIEW (usada no menu de personalização) ──────
+  let previewAngle = 0;
+  function updatePreviewCamera() {
+    const dist = 4;
+    camera.position.set(0, 1.5, -3.5);
+    camera.lookAt(0, 1, 0);
+  }
+
+  // ── PERSONALIZAÇÃO (lil-gui) — 
+  const params = {
+    corCorpo:          '#2255ff',
+    corPele:           '#ffcc88',
+    corPernas:         '#112288',
+    larguraCorpo:       1.0,
+    alturaCorpo:        1.0,
+    tamanhoCaleca:      1.0,
+    larguraBracos:  1.0,
+    larguraPernas:  1.0,
+  };
+
+  const gui = new GUI({ title: '🎨 Personalizar', width: 250 });
+  gui.domElement.style.setProperty('--background-color', 'rgba(10,10,20,0.95)');
+  gui.domElement.style.setProperty('--title-background-color', '#4466aa');
+  gui.domElement.style.setProperty('--text-color', '#ffffff');
+  gui.domElement.style.setProperty('--number-color', '#66ffcc');
+  gui.domElement.style.borderRadius = '12px';
+
+  const pastaCore = gui.addFolder('Cores');
+  pastaCore.addColor(params, 'corCorpo').name('Corpo').onChange(v => matBody.color.set(v));
+  pastaCore.addColor(params, 'corPele').name('Pele').onChange(v => matSkin.color.set(v));
+  pastaCore.addColor(params, 'corPernas').name('Pernas').onChange(v => matDark.color.set(v));
+
+  const pastaProp = gui.addFolder('Proporções');
+  pastaProp.add(params, 'larguraCorpo', 0.5, 2.0, 0.01).name('Largura corpo').onChange(v => {
+    body.scale.x = v; body.scale.z = v;
+  });
+  pastaProp.add(params, 'alturaCorpo', 0.5, 2.0, 0.01).name('Altura corpo').onChange(v => {
+    body.scale.y = v;
+    head.position.y      = 0.9 + 0.9 * v * 0.95;
+    pivotArmL.position.y = 0.9 + 0.9 * v * 0.85;
+    pivotArmR.position.y = 0.9 + 0.9 * v * 0.85;
+  });
+  pastaProp.add(params, 'tamanhoCaleca', 0.5, 1.8, 0.01).name('Cabeça').onChange(v => {
+    head.scale.setScalar(v);
+  });
+  pastaProp.add(params, 'larguraBracos', 0.5, 3.0, 0.01).name('Largura braços').onChange(v => {
+      meshArmL.scale.x = v; meshArmL.scale.z = v;
+      meshArmR.scale.x = v; meshArmR.scale.z = v;
+  });
+  pastaProp.add(params, 'larguraPernas', 0.5, 3.0, 0.01).name('Largura pernas').onChange(v => {
+      meshLegL.scale.x = v; meshLegL.scale.z = v;
+      meshLegR.scale.x = v; meshLegR.scale.z = v;
+  });
+
+  gui.domElement.style.position = 'fixed';
+  gui.domElement.style.top      = '50px';
+  gui.domElement.style.left   = '8px';
+  gui.domElement.style.zIndex   = '70'; 
+
+  // ── ESTADO DO JOGO ────────────────────────────────────────────
+  let gameStarted = false;
+
+  // ── BOTÃO JOGAR — transição do menu para o jogo ───────────────
+  document.getElementById('btn-play').addEventListener('click', () => {
+    // 1. Esconde o menu de personalização
+    document.getElementById('char-menu').style.display = 'none';
+    // 2. Esconde o gui (pode ser reaberto via pausa se quiseres — aqui fechamos)
+    gui.domElement.style.display = 'none';
+    // 3. Mostra o hint do jogo
+    document.getElementById('hint').style.display = 'block';
+    // 4. Arranca o jogo
+    gameStarted = true;
+    clock.start();
+    renderer.domElement.requestPointerLock();
+  });
+
+  // ── ESTADO DO JOGADOR ─────────────────────────────────────────
+  const INITIAL_STATE = { x: 0, y: 0, z: 0, angle: 0, camAngle: 0, camPitch: 0.4, camDist: 5 };
+
+  const pos     = new THREE.Vector3(0, 0, 0);
+  let   velY    = 0;
+  let   angle   = 0;
+  let   onGround = true;
+
+  // ── CÂMARA EM ÓRBITA (jogo) ───────────────────────────────────
+  let camAngle = INITIAL_STATE.camAngle;
+  let camPitch = INITIAL_STATE.camPitch;
+  let camDist  = INITIAL_STATE.camDist;
+
+  // ── RATO ──────────────────────────────────────────────────────
+  let pointerLocked = false;
+  let paused = false;
+  const pauseMenu = document.getElementById('pause-menu');
+
+  renderer.domElement.addEventListener('click', () => {
+    if (gameStarted && !paused) renderer.domElement.requestPointerLock();
+  });
+
+  document.addEventListener('pointerlockchange', () => {
+    const wasLocked = pointerLocked;
+    pointerLocked = document.pointerLockElement === renderer.domElement;
+    if (gameStarted && wasLocked && !pointerLocked && !paused) togglePause();
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!gameStarted) return;
+    if (!pointerLocked || paused) return;
+    camAngle -= e.movementX * SENS_H;
+    camPitch += e.movementY * SENS_V;
+    camPitch = Math.max(0.05, Math.min(1.4, camPitch));
+  });
+
+  document.addEventListener('wheel', e => {
+    if (!gameStarted || paused) return;
+    camDist += e.deltaY * 0.01;
+    camDist = Math.max(2, Math.min(15, camDist));
+  });
+
+  // ── INPUT ─────────────────────────────────────────────────────
+  const keys = {};
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space') e.preventDefault();
+    if (gameStarted && !paused) keys[e.code] = true;
+  });
+  document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+  // ── FÍSICA ────────────────────────────────────────────────────
+  function getFloorY(x, z) {
+    let highest = 0;
+    for (const p of platforms) {
+      if (x > p.minX && x < p.maxX && z > p.minZ && z < p.maxZ) {
+        if (p.topY > highest && p.topY <= pos.y + STEP_HEIGHT && pos.y >= p.baseY) {
+          highest = p.topY;
+        }
+      }
+    }
+    return highest;
+  }
+
+  function collidesWithWall(x, z) {
+    for (const p of platforms) {
+      if (x > p.minX && x < p.maxX && z > p.minZ && z < p.maxZ) {
+        if (p.topY > pos.y + STEP_HEIGHT && p.baseY < pos.y + 2) return true;
+      }
+    }
+    return false;
+  }
+
+  // ── PAUSA ─────────────────────────────────────────────────────
+  function togglePause() {
+    paused = !paused;
+    pauseMenu.style.display = paused ? 'flex' : 'none';
+    if (!paused) renderer.domElement.requestPointerLock();
+  }
+
+  document.getElementById('btn-resume').addEventListener('click', togglePause);
+
+  document.getElementById('btn-restart').addEventListener('click', () => {
+    pos.set(INITIAL_STATE.x, INITIAL_STATE.y, INITIAL_STATE.z);
+    velY     = 0;
+    angle    = INITIAL_STATE.angle;
+    camAngle = INITIAL_STATE.camAngle;
+    camPitch = INITIAL_STATE.camPitch;
+    camDist  = INITIAL_STATE.camDist;
+    onGround = true;
+    camPos.set(
+      INITIAL_STATE.x,
+      INITIAL_STATE.y + Math.sin(INITIAL_STATE.camPitch) * INITIAL_STATE.camDist,
+      INITIAL_STATE.z + Math.cos(INITIAL_STATE.camAngle) * INITIAL_STATE.camDist
+    );
+    for (const k in keys) keys[k] = false;
+    togglePause();
+  });
+
+  // ── LOOP ──────────────────────────────────────────────────────
+  const camPos = new THREE.Vector3(0, CAM_HEIGHT, camDist);
+  const clock  = new THREE.Clock();
+  const hint   = document.getElementById('hint');
+
+  function animate() {
+    requestAnimationFrame(animate);
+
+    // ── MODO PREVIEW (menu de personalização ativo) ───────────
+    if (!gameStarted) {
+      updatePreviewCamera();
+      const t = performance.now() * 0.002;
+      pivotArmL.rotation.x =  Math.sin(t) * 0.15;
+      pivotArmR.rotation.x = -Math.sin(t) * 0.15;
+      head.position.y = 1.65 + Math.sin(t * 0.6) * 0.02;
+      eye1.position.y = 1.65 + Math.sin(t * 0.6) * 0.02;
+      eye2.position.y = 1.65 + Math.sin(t * 0.6) * 0.02;
+      renderer.render(scene, camera);
+      return;
+    }
+
+    // ── MODO JOGO ─────────────────────────────────────────────
+    if (paused) { clock.getDelta(); return; }
+
+    const dt = Math.min(clock.getDelta(), 0.05);
+
+    const forward = new THREE.Vector3(-Math.sin(camAngle), 0, -Math.cos(camAngle));
+    const right   = new THREE.Vector3( Math.cos(camAngle), 0, -Math.sin(camAngle));
+
+    const moveDir = new THREE.Vector3();
+    if (keys['KeyW']) moveDir.addScaledVector(forward,  1);
+    if (keys['KeyS']) moveDir.addScaledVector(forward, -1);
+    if (keys['KeyA']) moveDir.addScaledVector(right,   -1);
+    if (keys['KeyD']) moveDir.addScaledVector(right,    1);
+
+    const moving  = moveDir.lengthSq() > 0;
+    const running = keys['ShiftLeft'] && moving;
+
+    if (keys['Space'] && onGround) { velY = JUMP_VEL; onGround = false; }
+
+    velY += GRAVITY * dt;
+    pos.y += velY * dt;
+
+    const floorY = getFloorY(pos.x, pos.z);
+    if (pos.y <= floorY) { pos.y = floorY; velY = 0; onGround = true; }
+    else { onGround = false; }
+
+    if (moving) {
+      moveDir.normalize();
+      const speed = running ? RUN_SPEED : MOVE_SPEED;
+      const step  = speed * dt;
+      const newX  = pos.x + moveDir.x * step;
+      if (!collidesWithWall(newX, pos.z)) pos.x = newX;
+      const newZ  = pos.z + moveDir.z * step;
+      if (!collidesWithWall(pos.x, newZ)) pos.z = newZ;
+
+      const targetAngle = Math.atan2(-moveDir.x, -moveDir.z);
+      let diff = targetAngle - angle;
+      while (diff >  Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      angle += diff * 0.15;
+    }
+
+    //pos.x = Math.max(-19, Math.min(19, pos.x));
+    //pos.z = Math.max(-19, Math.min(19, pos.z));
+
+    playerGroup.position.copy(pos);
+    playerGroup.rotation.y = angle;
+
+    const animSpeed     = running ? 0.012 : 0.006;
+    const animAmplitude = running ? 0.85  : 0.55;
+    const t             = performance.now() * animSpeed;
+    const swing         = moving ? Math.sin(t) * animAmplitude : 0;
+    const swingDamp     = moving ? swing * 0.6 : 0;
+
+    pivotArmL.rotation.x =  swing;
+    pivotArmR.rotation.x = -swing;
+    pivotLegL.rotation.x = -swingDamp;
+    pivotLegR.rotation.x =  swingDamp;
+
+    const desiredCam = new THREE.Vector3(
+      pos.x + Math.sin(camAngle) * camDist * Math.cos(camPitch),
+      pos.y + Math.sin(camPitch) * camDist,
+      pos.z + Math.cos(camAngle) * camDist * Math.cos(camPitch)
+    );
+    camPos.lerp(desiredCam, CAM_LERP);
+    camera.position.copy(camPos);
+    camera.lookAt(pos.x, pos.y + 1, pos.z);
+
+    hint.textContent = pointerLocked
+      ? 'ESC pausa · WASD movem · Shift corre · Rato câmara · Scroll zoom · Espaço salta'
+      : 'Clica para capturar o rato';
+
+    renderer.render(scene, camera);
+  }
+
+  animate();
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+</script>
+</body>
+</html>
