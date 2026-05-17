@@ -98,7 +98,7 @@
   const MOVE_SPEED  =  5;
   const RUN_SPEED   =  8;
   const CAM_HEIGHT  =  2.5;
-  const CAM_LERP    =  0.1;
+  const CAM_LERP    =  0.6;
   const SENS_H      =  0.008;
   const SENS_V      =  0.008;
   const STEP_HEIGHT =  0.6;
@@ -116,8 +116,13 @@
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.5));
   const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-  sun.position.set(10, 20, 10);
+  sun.position.set(10, 200, 10);
   sun.castShadow = true;
+  sun.shadow.camera.left   = -80;
+  sun.shadow.camera.right  =  80;
+  sun.shadow.camera.top    =  80;
+  sun.shadow.camera.bottom = -100;
+  sun.shadow.camera.far    =  500;
   scene.add(sun);
 
   // ── CHÃO ─────────────────────────────────────────────────────
@@ -125,6 +130,7 @@
     new THREE.PlaneGeometry(150, 200),
     new THREE.MeshLambertMaterial({ color: 0x44aa44 })
   );
+  ground.position.z = -80;
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
@@ -139,15 +145,94 @@
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     scene.add(mesh);
-    platforms.push({
+    const pData = {
       minX: x-w/2, maxX: x+w/2,
       minZ: z-d/2, maxZ: z+d/2,
       topY: y + h/2,
-      baseY: y - h/2        
+      baseY: y - h/2,
+      hw: w/2, hd: d/2,  // ← guarda metade da largura/profundidade
+      mesh: mesh
+    };
+    platforms.push(pData);
+    return { mesh, pData };
+  }
+  function createAnimatedPlatform(x, y, z, w, d, h, color, moveFn, options = {}) {
+    const { mesh, pData } = addPlatform(x, y, z, w, d, h, color);
+    const { lookAtCenter, axis = 'z' } = options;
+
+    return {
+      pData,
+      update(t) {
+        const oldX = pData.minX + pData.hw;
+        const oldZ = pData.minZ + pData.hd;
+
+        const { x: nx, y: ny, z: nz } = moveFn(t);
+
+        mesh.position.x = nx;
+        mesh.position.z = nz;
+        if (ny !== undefined) {
+          mesh.position.y = ny;
+          pData.topY  = ny + h / 2; 
+          pData.baseY = ny - h / 2;
+        }
+
+        pData.minX = nx - pData.hw;  pData.maxX = nx + pData.hw;
+        pData.minZ = nz - pData.hd;  pData.maxZ = nz + pData.hd;
+
+        if (lookAtCenter) {
+          const dx = nx - lookAtCenter.x;
+          const dy = (ny ?? mesh.position.y) - lookAtCenter.y;
+          const dz = nz - lookAtCenter.z;
+          if (axis === 'z') mesh.rotation.z = -Math.atan2(dx, dy);
+          if (axis === 'y') mesh.rotation.y = -Math.atan2(dx, dz);
+          if (axis === 'x') mesh.rotation.x = -Math.atan2(dz, dy);
+        }
+
+        if (currentPlatform === pData) {
+          pos.x += nx - oldX;
+          pos.z += nz - oldZ;
+        }
+      }
+    };
+  }
+  function createRisingPlatform(x, y, z, w, d, h, color, options = {}) {
+    const {
+      riseSpeed  = 0.05,
+      fallSpeed  = 0.03,
+      riseHeight = 8,
+      reverse    = false  // ← true = desce ao detetar jogador
+    } = options;
+
+    let currentY  = y;
+    let timeOnPlat = false;
+
+    const plat = createAnimatedPlatform(x, y, z, w, d, h, color, t => {
+    const onTop = (currentPlatform === plat.pData);
+
+    if (onTop) timeOnPlat = Math.min(timeOnPlat + 0.016, 1);
+    else       timeOnPlat = 0;
+
+    const triggered = onTop && (timeOnPlat >= 0.4); // ← delay fixo de 0.3s
+
+      if (!reverse) {
+        // Comportamento normal — sobe com jogador, desce sem
+        if (triggered) currentY = Math.min(currentY + riseSpeed, y + riseHeight);
+        else           currentY = Math.max(currentY - fallSpeed, y);
+      } else {
+        // Invertido — desce com jogador, sobe sem
+        if (triggered) currentY = Math.max(currentY - fallSpeed, y - riseHeight);
+        else           currentY = Math.min(currentY + riseSpeed, y);
+      }
+
+      return { x, y: currentY, z };
     });
+
+    return plat;
   }
   const white  = 0xffffff;
   const purple = 0xaa77ff;
+  const azul_claro = 0x90D5FF;
+  const azul_escuro = 0x0047AB;
   //(esquerda/direita, y, frente/trás, esticar, esticar, altura, cor)
   addPlatform(0,   2.5,   5,  10, 1,  5,  white);
   addPlatform(5,   2.5,   2,   1, 7,  5,  white);
@@ -174,12 +259,99 @@
   addPlatform(-3,  3.5,  -50,  5, 5,  7,  white);
   addPlatform(1,  4,    -57,  5, 5,  8,  white);
   addPlatform(1,  4.5,    -65,  5, 5,  9,  white);
-  addPlatform(-3,  20,   -80,  5, 5, 40,  white);
+  addPlatform(-3,  9.5,   -80,  5, 5, 20,  white);
   addPlatform(-3,  8,   -75,  5, 5, 1,  white);
   addPlatform(2,  9,   -80,  5, 5, 1,  white);
   addPlatform(-3,  10,   -85,  5, 5, 1,  white);
   addPlatform(-8,  11,   -80,  5, 5, 1,  white);
+  addPlatform(-3,  12,   -75,  5, 5, 1,  white);
+  addPlatform(2,  13,   -80,  5, 5, 1,  white);
+  addPlatform(-3,  14,   -85,  5, 5, 1,  white);
+  addPlatform(-8,  15,   -80,  5, 5, 1,  white);
+  addPlatform(-3,  16,   -75,  5, 5, 1,  white);
+  addPlatform(2,  17,   -80,  5, 5, 1,  white);
+  addPlatform(-3,  18,   -85,  5, 5, 1,  white);
+  addPlatform(-8,  19,   -80,  5, 5, 1,  white);
+  // ── ROXO ────────────────────────────────────────────────────
+  addPlatform(-3,  20,   -80,  5, 5, 1,  purple);
+  addPlatform(-3,  21,   -75,  5, 5, 1,  purple);
+  addPlatform(1,   22, -75, 3, 3, 1, purple);
+  addPlatform(4,   23, -80, 3, 3, 1, purple);
+  addPlatform(7,   24, -75, 3, 3, 1, purple);
+  addPlatform(9,   25, -78, 3, 3, 1, purple);
+  addPlatform(12,  26, -81, 3, 3, 1, purple);
+  addPlatform(15,  27, -81, 3, 3, 1, purple);
+  addPlatform(14.5,  28,   -75,  5, 5, 1,  purple); 
+  const platP1 = createAnimatedPlatform(20, 28.5, -75, 5, 5, 1, purple,
+    t => ({ x: 20, y: 28.5, z: -65 + Math.sin(t * 0.8) * 10 })
+  );
+  const platP2 = createAnimatedPlatform(20, 28.5, -50, 5, 5, 1, purple,
+    t => ({ x: 10 + Math.sin(t * 0.8) * 10, y: 28.5, z: -50 })
+  );
+  addPlatform(-5,  28,   -50,  5, 5, 1,  purple);
+  addPlatform(-10,  28,   -50,  7, 1, 1,  purple);
+  addPlatform(-13,  29,   -50,  1, 7, 1,  purple); 
+  addPlatform(-16,  30,   -47,  7, 1, 1,  purple); 
+  addPlatform(-13,  30,   -56,  1, 7, 1,  purple);
+  addPlatform(-13,  31,   -59,  7, 1, 1,  purple);
+  addPlatform(-16,  32,   -62,  1, 7, 1,  purple);
+  addPlatform(-19,  31,   -47,  1, 7, 1,  purple);
+  addPlatform(-22,  32,   -44,  7, 1, 1,  purple);
+  addPlatform(-25,  33,   -47,  1, 7, 1,  purple);
+  addPlatform(-25,  35,   -56,  7, 1, 1,  purple);
+  addPlatform(-25,  34,   -53,  1, 7, 1,  purple);
+  addPlatform(-22,  34,   -59,  1, 7, 1,  purple);
+  addPlatform(-24,  33,   -62,  7, 1, 1,  purple);
+  addPlatform(-25,  34,   -65,  1, 7, 1,  purple);
+  addPlatform(-25,  35,   -71,  1, 7, 1,  purple);
+  const platP3 = createAnimatedPlatform(-25, 42, -80, 5, 5, 1, purple,
+    t => ({ x: -25 + Math.sin(t * 0.5 ) * 8, y: 42 + Math.cos(t * 0.5) * 8, z: -80 }),
+    { lookAtCenter: { x: -25, y: 42, z: -80 }, axis: 'z' }
+  );
+  const platP4 = createAnimatedPlatform(-25, 42, -80, 5, 5, 1, purple,
+    t => ({ x: -25 + Math.sin(t * 0.5 + Math.PI/3) * 8, y: 42 + Math.cos(t * 0.5+ Math.PI/3) * 8, z: -80 }),
+    { lookAtCenter: { x: -25, y: 42, z: -80 }, axis: 'z' }
+  );
+  const platP5 = createAnimatedPlatform(-25, 43, -86, 5, 5, 1, purple,
+    t => ({ x: -25 + Math.cos(t * 0.5 ) * 8, y: 43 + Math.sin(t * 0.5) * 8, z: -86 }),
+    { lookAtCenter: { x: -25, y: 43, z: -86 }, axis: 'z' }
+  );
+  const platP6 = createAnimatedPlatform(-25, 43, -86, 5, 5, 1, purple,
+    t => ({ x: -25 + Math.cos(t * 0.5 + Math.PI/3) * 8, y: 43 + Math.sin(t * 0.5 + Math.PI/3) * 8, z: -86 }),
+    { lookAtCenter: { x: -25, y: 43, z: -86 }, axis: 'z' }
+  );
+  addPlatform(-25,  37, -91,  5, 5, 1,  purple);
+  addPlatform(-25,  38, -96,  3, 3, 1,  azul_escuro);
+  addPlatform(-26,  39, -100,  3, 3, 1,  purple);
+  addPlatform(-20,  39, -96,  3, 3, 1,  purple);
+  addPlatform(-21,  39, -100,  3, 3, 1,  purple);
+  addPlatform(-21,  40, -105,  3, 3, 1,  azul_escuro);
+  addPlatform(-13.5,  40, -96,  3, 3, 1,  purple);
+  addPlatform(-13.5,  41, -100,  3, 3, 1,  azul_escuro);
+  addPlatform(-15,  40, -105,  3, 3, 1,  purple);
+  addPlatform(-15,  40, -105,  3, 3, 1,  purple);
+  addPlatform(-10,  42, -105,  3, 3, 1,  azul_escuro);
+  addPlatform(-10,  42, -96,  3, 3, 1,  azul_escuro);
+  addPlatform(-6,  43, -100,  3, 3, 1,  azul_claro);
+  addPlatform(-2,  44, -104,  3, 3, 1,  azul_escuro);
+  addPlatform(-2,  44, -96,  3, 3, 1,  azul_escuro);
+  addPlatform(2,  45, -100,  3, 3, 1,  azul_claro);
+  addPlatform(2,  45, -92,  3, 3, 1,  azul_claro);
+  addPlatform(6,  46, -88,  3, 3, 1,  azul_escuro);
+  addPlatform(6,  46, -96,  3, 3, 1,  azul_escuro);
+  // ─── AZUL ───────────────────────────────────────────────
+  const platA1 = createRisingPlatform(11, 47, -96, 4, 4, 0.5, azul_claro,
+    { riseSpeed: 0.05, fallSpeed: 0.05, riseHeight: 10 }
+  );
+  const platA2 = createRisingPlatform(17, 57, -96, 4, 4, 0.5, azul_escuro,
+    { reverse: true, riseSpeed: 0.05, fallSpeed: 0.05, riseHeight: 9 }
+  );  
+  addPlatform(24,  48, -96,  5, 5, 1,  azul_escuro);
 
+
+
+  const animatedPlatforms = [platP1, platP2, platP3, platP4, platP5, platP6, 
+                            platA1, platA2];
 
   // ── JOGADOR ───────────────────────────────────────────────────
   const playerGroup = new THREE.Group();
@@ -317,9 +489,9 @@
   });
 
   // ── ESTADO DO JOGADOR ─────────────────────────────────────────
-  const INITIAL_STATE = { x: 0, y: 0, z: 0, angle: 0, camAngle: 0, camPitch: 0.4, camDist: 5 };
+  const INITIAL_STATE = { x: 6, y: 46, z: -96, angle: 0, camAngle: 0, camPitch: 0.4, camDist: 5 };
 
-  const pos     = new THREE.Vector3(0, 0, 0);
+  const pos     = new THREE.Vector3(INITIAL_STATE.x, INITIAL_STATE.y, INITIAL_STATE.z);
   let   velY    = 0;
   let   angle   = 0;
   let   onGround = true;
@@ -367,15 +539,20 @@
   document.addEventListener('keyup', e => { keys[e.code] = false; });
 
   // ── FÍSICA ────────────────────────────────────────────────────
+  let currentPlatform = null; // plataforma onde o jogador está pousado
+
   function getFloorY(x, z) {
     let highest = 0;
+    let highestP = null;
     for (const p of platforms) {
       if (x > p.minX && x < p.maxX && z > p.minZ && z < p.maxZ) {
         if (p.topY > highest && p.topY <= pos.y + STEP_HEIGHT && pos.y >= p.baseY) {
           highest = p.topY;
+          highestP = p;
         }
       }
     }
+    currentPlatform = highestP;
     return highest;
   }
 
@@ -476,9 +653,19 @@
       while (diff < -Math.PI) diff += Math.PI * 2;
       angle += diff * 0.15;
     }
+    // PLATAFORMAS ANIMADAS
+    for (const plat of animatedPlatforms) plat.update(clock.getElapsedTime());
 
     //pos.x = Math.max(-19, Math.min(19, pos.x));
     //pos.z = Math.max(-19, Math.min(19, pos.z));
+    // DISTANCE CULLING
+    const CULL_DIST = 90; // distância máxima em unidades
+    const CULL_DIST_SQ = CULL_DIST * CULL_DIST;
+    for (const p of platforms) {
+      const dx = ((p.minX + p.maxX) / 2) - pos.x;
+      const dz = ((p.minZ + p.maxZ) / 2) - pos.z;
+      p.mesh.visible = (dx * dx + dz * dz) < CULL_DIST_SQ;
+    }
 
     playerGroup.position.copy(pos);
     playerGroup.rotation.y = angle;
