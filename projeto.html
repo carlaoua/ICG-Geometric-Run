@@ -98,7 +98,7 @@
   const MOVE_SPEED  =  5;
   const RUN_SPEED   =  8;
   const CAM_HEIGHT  =  2.5;
-  const CAM_LERP    =  0.6;
+  const CAM_LERP    =  0.7;
   const SENS_H      =  0.008;
   const SENS_V      =  0.008;
   const STEP_HEIGHT =  0.6;
@@ -304,21 +304,21 @@
   addPlatform(-24,  33,   -62,  7, 1, 1,  purple);
   addPlatform(-25,  34,   -65,  1, 7, 1,  purple);
   addPlatform(-25,  35,   -71,  1, 7, 1,  purple);
-  const platP3 = createAnimatedPlatform(-25, 42, -80, 5, 5, 1, purple,
-    t => ({ x: -25 + Math.sin(t * 0.5 ) * 8, y: 42 + Math.cos(t * 0.5) * 8, z: -80 }),
-    { lookAtCenter: { x: -25, y: 42, z: -80 }, axis: 'z' }
+  const platP3 = createAnimatedPlatform(-25, 43, -80, 5, 5, 1, purple,
+    t => ({ x: -25 + Math.sin(t * 0.7 ) * 8, y: 43 + Math.cos(t * 0.7) * 8, z: -80 }),
+    { lookAtCenter: { x: -25, y: 43, z: -80 }, axis: 'z' }
   );
-  const platP4 = createAnimatedPlatform(-25, 42, -80, 5, 5, 1, purple,
-    t => ({ x: -25 + Math.sin(t * 0.5 + Math.PI/3) * 8, y: 42 + Math.cos(t * 0.5+ Math.PI/3) * 8, z: -80 }),
-    { lookAtCenter: { x: -25, y: 42, z: -80 }, axis: 'z' }
+  const platP4 = createAnimatedPlatform(-25, 43, -80, 5, 5, 1, purple,
+    t => ({ x: -25 + Math.sin(t * 0.7 + Math.PI/3) * 8, y: 43 + Math.cos(t * 0.7+ Math.PI/3) * 8, z: -80 }),
+    { lookAtCenter: { x: -25, y: 43, z: -80 }, axis: 'z' }
   );
-  const platP5 = createAnimatedPlatform(-25, 43, -86, 5, 5, 1, purple,
-    t => ({ x: -25 + Math.cos(t * 0.5 ) * 8, y: 43 + Math.sin(t * 0.5) * 8, z: -86 }),
-    { lookAtCenter: { x: -25, y: 43, z: -86 }, axis: 'z' }
+  const platP5 = createAnimatedPlatform(-25, 44, -86, 5, 5, 1, purple,
+    t => ({ x: -25 + Math.cos(t * 0.7 ) * 8, y: 44 + Math.sin(t * 0.7) * 8, z: -86 }),
+    { lookAtCenter: { x: -25, y: 44, z: -86 }, axis: 'z' }
   );
-  const platP6 = createAnimatedPlatform(-25, 43, -86, 5, 5, 1, purple,
-    t => ({ x: -25 + Math.cos(t * 0.5 + Math.PI/3) * 8, y: 43 + Math.sin(t * 0.5 + Math.PI/3) * 8, z: -86 }),
-    { lookAtCenter: { x: -25, y: 43, z: -86 }, axis: 'z' }
+  const platP6 = createAnimatedPlatform(-25, 44, -86, 5, 5, 1, purple,
+    t => ({ x: -25 + Math.cos(t * 0.7 + Math.PI/3) * 8, y: 44 + Math.sin(t * 0.7+ Math.PI/3) * 8, z: -86 }),
+    { lookAtCenter: { x: -25, y: 44, z: -86 }, axis: 'z' }
   );
   addPlatform(-25,  37, -91,  5, 5, 1,  purple);
   addPlatform(-25,  38, -96,  3, 3, 1,  azul_escuro);
@@ -347,11 +347,31 @@
     { reverse: true, riseSpeed: 0.05, fallSpeed: 0.05, riseHeight: 9 }
   );  
   addPlatform(24,  48, -96,  5, 5, 1,  azul_escuro);
-
-
+  const platA3 = createRisingPlatform(24, 49, -90, 4, 4, 0.5, azul_claro,
+    { riseSpeed: 0.05, fallSpeed: 0.05, riseHeight: 10 }
+  );
+  addPlatform(24,  59, -85,  5, 5, 1,  azul_escuro);
+  const platA5 = createRisingPlatform(24, 70, -65, 4, 20, 0.5, azul_escuro,
+    { reverse: true, riseSpeed: 0.05, fallSpeed: 0.03, riseHeight: 9 }
+  );
+  const platA4 = createRisingPlatform(24, 60, -79, 4, 4, 0.5, azul_claro,
+    { riseSpeed: 0.08, fallSpeed: 0.05, riseHeight: 10 }
+  );
+  addPlatform(24,  67, -50,  5, 5, 1,  azul_claro);
+  const platA6 = createRisingPlatform(24, 68, -44, 4, 4, 0.5, azul_claro,
+    { riseSpeed: 0.05, fallSpeed: 0.05, riseHeight: 10 }
+  );
+  const platA7 = createRisingPlatform(7, 78, -44, 25, 4, 0.5, azul_escuro,
+    { reverse: true, riseSpeed: 0.05, fallSpeed: 0.06, riseHeight: 9 }
+  );
+  const platA8 = createRisingPlatform(7, 78, -40, 25, 4, 0.5, azul_escuro,
+    { reverse: true, riseSpeed: 0.05, fallSpeed: 0.06, riseHeight: 9 }
+  );
+  addPlatform(-10,  77, -44,  5, 5, 1,  azul_claro);
 
   const animatedPlatforms = [platP1, platP2, platP3, platP4, platP5, platP6, 
-                            platA1, platA2];
+                            platA1, platA2,platA3, platA4, platA5, platA6, 
+                            platA7, platA8];
 
   // ── JOGADOR ───────────────────────────────────────────────────
   const playerGroup = new THREE.Group();
@@ -426,7 +446,6 @@
     corPele:           '#ffcc88',
     corPernas:         '#112288',
     larguraCorpo:       1.0,
-    alturaCorpo:        1.0,
     tamanhoCaleca:      1.0,
     larguraBracos:  1.0,
     larguraPernas:  1.0,
@@ -447,12 +466,6 @@
   const pastaProp = gui.addFolder('Proporções');
   pastaProp.add(params, 'larguraCorpo', 0.5, 2.0, 0.01).name('Largura corpo').onChange(v => {
     body.scale.x = v; body.scale.z = v;
-  });
-  pastaProp.add(params, 'alturaCorpo', 0.5, 2.0, 0.01).name('Altura corpo').onChange(v => {
-    body.scale.y = v;
-    head.position.y      = 0.9 + 0.9 * v * 0.95;
-    pivotArmL.position.y = 0.9 + 0.9 * v * 0.85;
-    pivotArmR.position.y = 0.9 + 0.9 * v * 0.85;
   });
   pastaProp.add(params, 'tamanhoCaleca', 0.5, 1.8, 0.01).name('Cabeça').onChange(v => {
     head.scale.setScalar(v);
@@ -489,7 +502,7 @@
   });
 
   // ── ESTADO DO JOGADOR ─────────────────────────────────────────
-  const INITIAL_STATE = { x: 0, y: 0, z: 0, angle: 0, camAngle: 0, camPitch: 0.4, camDist: 5 };
+  const INITIAL_STATE = { x: 24, y: 59, z: -85, angle: 0, camAngle: 0, camPitch: 0.4, camDist: 5 };
 
   const pos     = new THREE.Vector3(INITIAL_STATE.x, INITIAL_STATE.y, INITIAL_STATE.z);
   let   velY    = 0;
