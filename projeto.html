@@ -82,6 +82,15 @@
 <!-- ── MENU DE PAUSA ── -->
 <div id="pause-menu">
   <h1>⏸ PAUSA</h1>
+  <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+    <label style="color:#fff; font: 14px sans-serif;">
+      🖱️ Sensibilidade: <span id="sens-val">5</span>
+    </label>
+    <input type="range" id="sens-slider"
+      min="1" max="10" step="1" value="5"
+      autocomplete="off"
+      style="width:220px; accent-color:#88aaff;">
+  </div>
   <button class="pause-btn" id="btn-resume">▶ Retomar</button>
   <button class="pause-btn" id="btn-restart">↺ Reiniciar</button>
 </div>
@@ -99,8 +108,7 @@
   const RUN_SPEED   =  8;
   const CAM_HEIGHT  =  2.5;
   const CAM_LERP    =  0.7;
-  const SENS_H      =  0.008;
-  const SENS_V      =  0.008;
+  let sensibilidade = 0.008;
   const STEP_HEIGHT =  0.6;
 
   // ── RENDERER ─────────────────────────────────────────────────
@@ -114,21 +122,28 @@
 
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.3));
   const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-  sun.position.set(10, 200, 10);
+  sun.position.set(20, 200, 50);
   sun.castShadow = true;
-  sun.shadow.camera.left   = -80;
-  sun.shadow.camera.right  =  80;
-  sun.shadow.camera.top    =  80;
-  sun.shadow.camera.bottom = -100;
-  sun.shadow.camera.far    =  500;
+  sun.shadow.mapSize.set(512, 512);
+  sun.shadow.camera.left   = -30;
+  sun.shadow.camera.right  =  30;
+  sun.shadow.camera.top    =  35;
+  sun.shadow.camera.bottom = -30;
+  sun.shadow.camera.near   =  100; 
+  sun.shadow.camera.far    =  300;
+  sun.shadow.camera.updateProjectionMatrix();
   scene.add(sun);
+  scene.add(sun.target);
 
   // ── CHÃO ─────────────────────────────────────────────────────
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(150, 200),
-    new THREE.MeshLambertMaterial({ color: 0x44aa44 })
+    new THREE.PlaneGeometry(150, 170),
+    new THREE.MeshLambertMaterial({ color: 0x44aa44, 
+      map: new THREE.TextureLoader().load('./grasslight-big.jpg', tex => {
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(10, 10);}) })
   );
   ground.position.z = -80;
   ground.rotation.x = -Math.PI / 2;
@@ -136,10 +151,11 @@
   scene.add(ground);
   // ── PLATAFORMAS ───────────────────────────────────────────────
   const platforms = [];
-  function addPlatform(x, y, z, w, d, h, color) {
+  function addPlatform(x, y, z, w, d, h, colorOrMat) {
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(w, h, d),
-      new THREE.MeshLambertMaterial({ color })
+      colorOrMat instanceof THREE.Material ? colorOrMat 
+      : new THREE.MeshLambertMaterial({ color: colorOrMat })
     );
     mesh.position.set(x, y, z);
     mesh.castShadow = true;
@@ -229,26 +245,42 @@
 
     return plat;
   }
+  const matTower = new THREE.MeshLambertMaterial({ map: new THREE.TextureLoader().load('./stone.jpg', stonetex => {
+    stonetex.wrapS = stonetex.wrapT = THREE.RepeatWrapping;
+    stonetex.repeat.set( 2, 2 );}) 
+  });
+  const matWall = new THREE.MeshLambertMaterial({ map: new THREE.TextureLoader().load('./stone.jpg', stonetex => {
+    stonetex.wrapS = stonetex.wrapT = THREE.RepeatWrapping;
+    stonetex.repeat.set( 17, 2 );}) 
+  });
+  function addTower(cx, cz) {
+    addPlatform(cx, 15, cz, 20, 20, 30, matTower);
+    addPlatform(cx-10, 32, cz+10, 4, 4, 4, matTower);
+    addPlatform(cx+10, 32, cz+10, 4, 4, 4, matTower);
+    addPlatform(cx-10, 32, cz-10, 4, 4, 4, matTower);
+    addPlatform(cx+10, 32, cz-10, 4, 4, 4, matTower);
+    addPlatform(cx,    32, cz+10, 4, 4, 4, matTower);
+    addPlatform(cx,    32, cz-10, 4, 4, 4, matTower);
+    addPlatform(cx-10, 32, cz,   4, 4, 4, matTower);
+    addPlatform(cx+10, 32, cz,   4, 4, 4, matTower);
+  }
   const white  = 0xffffff;
   const purple = 0xaa77ff;
   const azul_claro = 0x90D5FF;
   const azul_escuro = 0x0047AB;
-  //(esquerda/direita, y, frente/trás, esticar, esticar, altura, cor)
-  addPlatform(0,   2.5,   5,  10, 1,  5,  white);
-  addPlatform(5,   2.5,   2,   1, 7,  5,  white);
-  addPlatform(-5,  2.5,   2,   1, 7,  5,  white);
-  addPlatform(6,   3,    -2,   1, 1,  6,  white);
-  addPlatform(7,   3.5,  -3,   1, 1,  7,  white);
-  addPlatform(8,   4,    -4,   1, 1,  8,  white);
-  addPlatform(9,   4.5,  -5,   1, 1,  9,  white);
-  addPlatform(10,  5,    -6,   1, 1, 10,  white);
-  addPlatform(43,  5.5,  -7,  65, 1, 11,  white);
-  addPlatform(-6,  3,    -2,   1, 1,  6,  white);
-  addPlatform(-7,  3.5,  -3,   1, 1,  7,  white);
-  addPlatform(-8,  4,    -4,   1, 1,  8,  white);
-  addPlatform(-9,  4.5,  -5,   1, 1,  9,  white);
-  addPlatform(-10, 5,    -6,   1, 1, 10,  white);
-  addPlatform(-43, 5.5,  -7,  65, 1, 11,  white);
+  //(esquerda/direita, y, frente/trás, esticar, esticar, altura, cor/textura)
+  addPlatform(0,  -2,   5,  23, 1,  20,  matTower);
+  addPlatform(-10.99,  4.5,    -1.99,   1, 13,  9,  matTower);
+  addPlatform(10.99,  4.5,    -1.99,   1, 13,  9,  matTower);
+  addPlatform(43,  5.5,  -7.5,  65, 2, 11,  matWall);
+  addPlatform(-43, 5.5,  -7.5,  65, 2, 11, matWall);
+  addPlatform( 0, 5.5, -159, 150, 2, 11, matWall);
+  addPlatform( 75, 5.5, -90, 2, 140, 11, matWall);
+  addPlatform( -75, 5.5, -90, 2, 140, 11, matWall);
+  addTower(66, -150);
+  addTower(-66, -150);
+  addTower(66, -16.4);
+  addTower(-66, -16.4);
   // ── BRANCO ───────────────────────────────────────────────────
   addPlatform(0,   0.5,  -10,  5, 5,  1,  white);
   addPlatform(0,   1,    -17,  5, 5,  2,  white);
@@ -384,12 +416,12 @@
 
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.9, 16), matBody);
   body.position.y = 0.9;
-  body.castShadow = true;
+  body.castShadow = true; body.receiveShadow = true;
   playerGroup.add(body);
 
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 16), matSkin);
   head.position.y = 1.65;
-  head.castShadow = true;
+  head.castShadow = true; head.receiveShadow = true;
   playerGroup.add(head);
 
   const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), Dark);
@@ -502,7 +534,7 @@
   });
 
   // ── ESTADO DO JOGADOR ─────────────────────────────────────────
-  const INITIAL_STATE = { x: 0, y: 0, z: -0, angle: 0, camAngle: 0, camPitch: 0.4, camDist: 5 };
+  const INITIAL_STATE = { x: 0, y: 0, z: 0, angle: 0, camAngle: 0, camPitch: 0.4, camDist: 5 };
 
   const pos     = new THREE.Vector3(INITIAL_STATE.x, INITIAL_STATE.y, INITIAL_STATE.z);
   let   velY    = 0;
@@ -532,8 +564,8 @@
   document.addEventListener('mousemove', e => {
     if (!gameStarted) return;
     if (!pointerLocked || paused) return;
-    camAngle -= e.movementX * SENS_H;
-    camPitch += e.movementY * SENS_V;
+    camAngle -= e.movementX * sensibilidade;
+    camPitch += e.movementY * sensibilidade;
     camPitch = Math.max(0.05, Math.min(1.4, camPitch));
   });
 
@@ -604,6 +636,12 @@
     togglePause();
   });
 
+  document.getElementById('sens-slider').addEventListener('input', e => {
+    const v = Number(e.target.value);
+    sensibilidade = v * 0.0016;
+    document.getElementById('sens-val').textContent = v;
+  });
+
   // ── LOOP ──────────────────────────────────────────────────────
   const camPos = new THREE.Vector3(0, CAM_HEIGHT, camDist);
   const clock  = new THREE.Clock();
@@ -669,10 +707,8 @@
     // PLATAFORMAS ANIMADAS
     for (const plat of animatedPlatforms) plat.update(clock.getElapsedTime());
 
-    //pos.x = Math.max(-19, Math.min(19, pos.x));
-    //pos.z = Math.max(-19, Math.min(19, pos.z));
     // DISTANCE CULLING
-    const CULL_DIST = 90; // distância máxima em unidades
+    const CULL_DIST = 120; // distância máxima em unidades
     const CULL_DIST_SQ = CULL_DIST * CULL_DIST;
     for (const p of platforms) {
       const dx = ((p.minX + p.maxX) / 2) - pos.x;
@@ -702,6 +738,10 @@
     camPos.lerp(desiredCam, CAM_LERP);
     camera.position.copy(camPos);
     camera.lookAt(pos.x, pos.y + 1, pos.z);
+
+    sun.position.set(pos.x + 10, 200, pos.z + 10);
+    sun.target.position.set(pos.x, pos.y, pos.z);
+    sun.target.updateMatrixWorld();
 
     hint.textContent = pointerLocked
       ? 'ESC pausa · WASD movem · Shift corre · Rato câmara · Scroll zoom · Espaço salta'
