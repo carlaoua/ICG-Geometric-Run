@@ -59,6 +59,32 @@
       box-shadow: 0 4px 24px rgba(34,180,100,0.4);
     }
     #btn-play:hover { background: rgba(34,200,110,1); transform: scale(1.04); }
+
+    #controls-box {
+      position: absolute;
+      left: 40px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 240px;
+      padding: 18px 20px;
+      border-radius: 14px;
+      background: rgba(0,0,0,0.28);
+      border: 1px solid rgba(255,255,255,0.18);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+      backdrop-filter: blur(12px);
+      color: #fff;
+    }
+
+    #controls-box h2 {
+      margin-bottom: 12px;
+      font: bold 20px sans-serif;
+    }
+
+    #controls-box p {
+      margin: 6px 0;
+      font: 14px/1.35 sans-serif;
+      color: rgba(255,255,255,0.9);
+    }
   </style>
 
   <script type="importmap">
@@ -92,7 +118,19 @@
       style="width:220px; accent-color:#88aaff;">
   </div>
   <button class="pause-btn" id="btn-resume">▶ Retomar</button>
+  <button class="pause-btn" id="btn-daynight">🌙 Modo noite</button>
   <button class="pause-btn" id="btn-restart">↺ Reiniciar</button>
+
+  <!-- ── MENU DOS COMANDOS ── -->
+  <div id="controls-box">
+    <h2>Comandos disponiveis</h2>
+    <p><strong>W A S D</strong> — mover</p>
+    <p><strong>Shift</strong> — correr</p>
+    <p><strong>Espaço</strong> — saltar</p>
+    <p><strong>Rato</strong> — mover câmara</p>
+    <p><strong>Scroll</strong> — zoom</p>
+    <p><strong>ESC</strong> — pausa</p>
+  </div>
 </div>
 
 <div id="hint">Clica para capturar o rato · WASD movem · Shift corre · Espaço salta</div>
@@ -122,20 +160,67 @@
 
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+  const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+  scene.add(ambient);
+
   const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-  sun.position.set(20, 200, 50);
+  sun.position.set(20, 150, 50);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(512, 512);
+  sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.camera.left   = -30;
   sun.shadow.camera.right  =  30;
   sun.shadow.camera.top    =  35;
   sun.shadow.camera.bottom = -30;
-  sun.shadow.camera.near   =  100; 
   sun.shadow.camera.far    =  300;
   sun.shadow.camera.updateProjectionMatrix();
   scene.add(sun);
   scene.add(sun.target);
+
+  // ── DIA / NOITE ────────────────────────────────────────────────
+  let isNight = false;
+  const btnDayNight = document.getElementById('btn-daynight');
+
+  function setDayNight(night) {
+    isNight = night;
+
+    if (isNight) {
+      scene.background = new THREE.Color(0x0b1020);
+
+      ambient.color.set(0x8899bb);
+      ambient.intensity = 0.10;
+
+      sun.color.set(0xaaccff);
+      sun.intensity = 0.25;
+
+      btnDayNight.textContent = '☀️ Modo dia';
+    } else {
+      scene.background = new THREE.Color(0x87ceeb);
+
+      ambient.color.set(0xffffff);
+      ambient.intensity = 0.4;
+
+      sun.color.set(0xffffff);
+      sun.intensity = 1.5;
+
+      btnDayNight.textContent = '🌙 Modo noite';
+    }
+
+    for (const lamp of streetLamps) {
+      if (isNight) {
+        lamp.spot.visible = true;
+        lamp.spot.intensity = 25;
+        lamp.bulbMat.emissiveIntensity = 3;
+      } else {
+        lamp.spot.visible = false;
+        lamp.spot.intensity = 0;
+        lamp.bulbMat.emissiveIntensity = 0;
+      }
+    }
+  }
+
+  btnDayNight.addEventListener('click', () => {
+    setDayNight(!isNight);
+  });
 
   // ── CHÃO ─────────────────────────────────────────────────────
   const ground = new THREE.Mesh(
@@ -178,11 +263,11 @@
 
     return {
       pData,
-      update(t) {
+      update(t, dt) {
         const oldX = pData.minX + pData.hw;
         const oldZ = pData.minZ + pData.hd;
 
-        const { x: nx, y: ny, z: nz } = moveFn(t);
+        const { x: nx, y: ny, z: nz } = moveFn(t, dt);
 
         mesh.position.x = nx;
         mesh.position.z = nz;
@@ -213,8 +298,8 @@
   }
   function createRisingPlatform(x, y, z, w, d, h, color, options = {}) {
     const {
-      riseSpeed  = 0.05,
-      fallSpeed  = 0.03,
+      riseSpeed  = 3,
+      fallSpeed  = 3,
       riseHeight = 8,
       reverse    = false  // ← true = desce ao detetar jogador
     } = options;
@@ -222,28 +307,89 @@
     let currentY  = y;
     let timeOnPlat = false;
 
-    const plat = createAnimatedPlatform(x, y, z, w, d, h, color, t => {
+    const plat = createAnimatedPlatform(x, y, z, w, d, h, color, (t, dt) => {
     const onTop = (currentPlatform === plat.pData);
 
-    if (onTop) timeOnPlat = Math.min(timeOnPlat + 0.016, 1);
-    else       timeOnPlat = 0;
+      if (onTop) timeOnPlat = Math.min(timeOnPlat + dt, 1);
+      else       timeOnPlat = 0;
 
-    const triggered = onTop && (timeOnPlat >= 0.4); // ← delay fixo de 0.3s
+      const triggered = onTop && (timeOnPlat >= 0.4);
 
       if (!reverse) {
-        // Comportamento normal — sobe com jogador, desce sem
-        if (triggered) currentY = Math.min(currentY + riseSpeed, y + riseHeight);
-        else           currentY = Math.max(currentY - fallSpeed, y);
+        if (triggered) currentY = Math.min(currentY + riseSpeed * dt, y + riseHeight);
+        else           currentY = Math.max(currentY - fallSpeed * dt, y);
       } else {
-        // Invertido — desce com jogador, sobe sem
-        if (triggered) currentY = Math.max(currentY - fallSpeed, y - riseHeight);
-        else           currentY = Math.min(currentY + riseSpeed, y);
+        if (triggered) currentY = Math.max(currentY - fallSpeed * dt, y - riseHeight);
+        else           currentY = Math.min(currentY + riseSpeed * dt, y);
       }
 
       return { x, y: currentY, z };
     });
 
     return plat;
+  }
+  // ── CENÁRIO E TEXTURAS ─────────────────────────────────────────────
+  const streetLamps = [];
+  function addStreetLamp(x, y, z, rotY=0) {
+    const lamp = new THREE.Group();
+    const matPole = new THREE.MeshLambertMaterial({ color: 0x3a3a3a });
+    const matHead = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+    const poleHeight = 8.5;
+    const armLength = 2.5;
+    // Poste
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.16, poleHeight, 12),
+      matPole
+    );
+    pole.position.y = poleHeight / 2;
+    pole.castShadow = true;
+    lamp.add(pole);
+    // Braço
+    const arm = new THREE.Mesh(
+      new THREE.BoxGeometry(armLength, 0.08, 0.08),
+      matPole
+    );
+    arm.position.set(armLength / 2 - 0.05, poleHeight - 0.45, 0);
+    arm.castShadow = true;
+    lamp.add(arm);
+    // Cabeça da luz
+    const head = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.16, 0.22, 0.35, 12),
+      matHead
+    );
+    head.position.set(armLength - 0.15, poleHeight - 0.65, 0);
+    head.castShadow = true;
+    lamp.add(head);
+    // Luz
+    const spot = new THREE.SpotLight(0xffd46b, 25, 25, Math.PI / 8, 0.35, 2);
+    spot.position.set(armLength - 0.15, poleHeight - 0.8, 0);
+    spot.castShadow = true;
+    spot.shadow.mapSize.set(1024, 1024);
+
+    const bulbMat = new THREE.MeshStandardMaterial({
+      color: 0xffe7a0,
+      emissive: 0xffcc55,
+      emissiveIntensity: 3
+    });
+
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.09, 20, 20),
+      bulbMat
+    );
+    bulb.position.set(armLength - 0.14, poleHeight - 0.82, 0);
+    lamp.add(bulb);
+
+    const target = new THREE.Object3D();
+    target.position.set(2, -5.1, 0); 
+    lamp.add(target);
+    spot.target = target;
+
+    lamp.add(spot);
+    lamp.position.set(x, y, z);
+    lamp.rotation.y = rotY;
+    scene.add(lamp);
+
+    streetLamps.push({ spot, bulbMat });
   }
   const matTower = new THREE.MeshLambertMaterial({ map: new THREE.TextureLoader().load('./stone.jpg', stonetex => {
     stonetex.wrapS = stonetex.wrapT = THREE.RepeatWrapping;
@@ -281,6 +427,10 @@
   addTower(-66, -150);
   addTower(66, -16.4);
   addTower(-66, -16.4);
+  addStreetLamp(-5, 5.5, -50);
+  addStreetLamp(-1,  20.5, -80, Math.PI);
+  addStreetLamp(-27, 37.5, -91);
+  setDayNight(false);
   // ── BRANCO ───────────────────────────────────────────────────
   addPlatform(0,   0.5,  -10,  5, 5,  1,  white);
   addPlatform(0,   1,    -17,  5, 5,  2,  white);
@@ -373,31 +523,31 @@
   addPlatform(6,  46, -96,  3, 3, 1,  azul_escuro);
   // ─── AZUL ───────────────────────────────────────────────
   const platA1 = createRisingPlatform(11, 47, -96, 4, 4, 0.5, azul_claro,
-    { riseSpeed: 0.05, fallSpeed: 0.05, riseHeight: 10 }
+    { riseSpeed: 3, fallSpeed: 3, riseHeight: 10 }
   );
   const platA2 = createRisingPlatform(17, 57, -96, 4, 4, 0.5, azul_escuro,
-    { reverse: true, riseSpeed: 0.05, fallSpeed: 0.05, riseHeight: 9 }
+    { reverse: true, riseSpeed: 3, fallSpeed: 3, riseHeight: 9 }
   );  
   addPlatform(24,  48, -96,  5, 5, 1,  azul_escuro);
   const platA3 = createRisingPlatform(24, 49, -90, 4, 4, 0.5, azul_claro,
-    { riseSpeed: 0.05, fallSpeed: 0.05, riseHeight: 10 }
+    { riseSpeed: 3, fallSpeed: 3, riseHeight: 10 }
   );
   addPlatform(24,  59, -85,  5, 5, 1,  azul_escuro);
   const platA5 = createRisingPlatform(24, 70, -65, 4, 20, 0.5, azul_escuro,
-    { reverse: true, riseSpeed: 0.05, fallSpeed: 0.03, riseHeight: 9 }
+    { reverse: true, riseSpeed: 3, fallSpeed: 3, riseHeight: 9 }
   );
   const platA4 = createRisingPlatform(24, 60, -79, 4, 4, 0.5, azul_claro,
-    { riseSpeed: 0.08, fallSpeed: 0.05, riseHeight: 10 }
+    { riseSpeed: 3, fallSpeed: 3, riseHeight: 10 }
   );
   addPlatform(24,  67, -50,  5, 5, 1,  azul_claro);
   const platA6 = createRisingPlatform(24, 68, -44, 4, 4, 0.5, azul_claro,
-    { riseSpeed: 0.05, fallSpeed: 0.05, riseHeight: 10 }
+    { riseSpeed: 3, fallSpeed: 3, riseHeight: 10 }
   );
   const platA7 = createRisingPlatform(7, 78, -44, 25, 4, 0.5, azul_escuro,
-    { reverse: true, riseSpeed: 0.05, fallSpeed: 0.06, riseHeight: 9 }
+    { reverse: true, riseSpeed: 3, fallSpeed: 3.6, riseHeight: 9 }
   );
   const platA8 = createRisingPlatform(7, 78, -40, 25, 4, 0.5, azul_escuro,
-    { reverse: true, riseSpeed: 0.05, fallSpeed: 0.06, riseHeight: 9 }
+    { reverse: true, riseSpeed: 3, fallSpeed: 3.6, riseHeight: 9 }
   );
   addPlatform(-10,  77, -44,  5, 5, 1,  azul_claro);
 
@@ -405,6 +555,58 @@
                             platA1, platA2,platA3, platA4, platA5, platA6, 
                             platA7, platA8];
 
+  // ── CHECKPOINTS ───────────────────────────────────────────────
+  function createFlag(x, y, z) {
+    const group = new THREE.Group();
+
+    // Mastro
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.05, 3, 8),
+      new THREE.MeshLambertMaterial({ color: 0xaaaaaa })
+    );
+    pole.position.y = 1.5;
+    group.add(pole);
+
+    // Bandeira (começa em baixo — scaleY = 0)
+    const flag = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, 0.5, 0.05),
+      new THREE.MeshLambertMaterial({ color: 0xff2222})
+    );
+    flag.position.set(0.45, 0.25, 0);
+    group.add(flag);
+
+    group.position.set(x, y, z);
+    scene.add(group);
+
+    return { group, flag, collected: false, x, y, z, radius: 4 };
+  }
+
+  const checkpoints = [
+    createFlag(-3,  20.5, -80),
+    createFlag(-25, 37.5, -91),
+    createFlag(-10, 77.5, -44),
+  ];
+
+  let checkpointState = null;
+
+  function checkCheckpoints(dt) {
+    for (const cp of checkpoints) {
+      // Animar a subida da bandeira
+      if (cp.collected && cp.flag.position.y < 2.75) {
+        cp.flag.position.y = Math.min(cp.flag.position.y + dt * 2, 2.75);
+      }
+
+      if (cp.collected) continue;
+
+      const dx = pos.x - cp.x;
+      const dy = pos.y - cp.y;
+      const dz = pos.z - cp.z;
+      if (Math.sqrt(dx*dx + dy*dy + dz*dz) < cp.radius) {
+        cp.collected = true;
+        checkpointState = { x: cp.x, y: cp.y + 1, z: cp.z, angle, camAngle, camPitch, camDist };
+      }
+    }
+  }
   // ── JOGADOR ───────────────────────────────────────────────────
   const playerGroup = new THREE.Group();
   scene.add(playerGroup);
@@ -620,17 +822,17 @@
   document.getElementById('btn-resume').addEventListener('click', togglePause);
 
   document.getElementById('btn-restart').addEventListener('click', () => {
-    pos.set(INITIAL_STATE.x, INITIAL_STATE.y, INITIAL_STATE.z);
-    velY     = 0;
-    angle    = INITIAL_STATE.angle;
-    camAngle = INITIAL_STATE.camAngle;
-    camPitch = INITIAL_STATE.camPitch;
-    camDist  = INITIAL_STATE.camDist;
+    const spawnState = checkpointState ?? INITIAL_STATE;
+    pos.set(spawnState.x, spawnState.y, spawnState.z);
+    angle    = spawnState.angle;
+    camAngle = spawnState.camAngle;
+    camPitch = spawnState.camPitch;
+    camDist  = spawnState.camDist;
     onGround = true;
     camPos.set(
-      INITIAL_STATE.x,
-      INITIAL_STATE.y + Math.sin(INITIAL_STATE.camPitch) * INITIAL_STATE.camDist,
-      INITIAL_STATE.z + Math.cos(INITIAL_STATE.camAngle) * INITIAL_STATE.camDist
+      spawnState.x,
+      spawnState.y + Math.sin(spawnState.camPitch) * spawnState.camDist,
+      spawnState.z + Math.cos(spawnState.camAngle) * spawnState.camDist
     );
     for (const k in keys) keys[k] = false;
     togglePause();
@@ -689,6 +891,8 @@
     if (pos.y <= floorY) { pos.y = floorY; velY = 0; onGround = true; }
     else { onGround = false; }
 
+    checkCheckpoints(dt);
+
     if (moving) {
       moveDir.normalize();
       const speed = running ? RUN_SPEED : MOVE_SPEED;
@@ -705,10 +909,11 @@
       angle += diff * 0.15;
     }
     // PLATAFORMAS ANIMADAS
-    for (const plat of animatedPlatforms) plat.update(clock.getElapsedTime());
+    const elapsed = clock.getElapsedTime();
+    for (const plat of animatedPlatforms) plat.update(elapsed, dt);
 
     // DISTANCE CULLING
-    const CULL_DIST = 120; // distância máxima em unidades
+    const CULL_DIST = 150; // distância máxima em unidades
     const CULL_DIST_SQ = CULL_DIST * CULL_DIST;
     for (const p of platforms) {
       const dx = ((p.minX + p.maxX) / 2) - pos.x;
@@ -739,7 +944,7 @@
     camera.position.copy(camPos);
     camera.lookAt(pos.x, pos.y + 1, pos.z);
 
-    sun.position.set(pos.x + 10, 200, pos.z + 10);
+    sun.position.set(pos.x + 10, 150, pos.z + 10);
     sun.target.position.set(pos.x, pos.y, pos.z);
     sun.target.updateMatrixWorld();
 
