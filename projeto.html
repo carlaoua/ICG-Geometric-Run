@@ -257,7 +257,7 @@
       minZ: z-d/2, maxZ: z+d/2,
       topY: y + h/2,
       baseY: y - h/2,
-      hw: w/2, hd: d/2,  // ← guarda metade da largura/profundidade
+      hw: w/2, hd: d/2, 
       mesh: mesh
     };
     platforms.push(pData);
@@ -307,7 +307,7 @@
       riseSpeed  = 3,
       fallSpeed  = 3,
       riseHeight = 8,
-      reverse    = false  // ← true = desce ao detetar jogador
+      reverse    = false  
     } = options;
 
     let currentY  = y;
@@ -420,7 +420,7 @@
   const purple = 0xaa77ff;
   const azul_claro = 0x90D5FF;
   const azul_escuro = 0x0047AB;
-  //(esquerda/direita, y, frente/trás, esticar, esticar, altura, cor/textura)
+
   addPlatform(0,  -2,   5,  23, 1,  20,  matTower);
   addPlatform(-10.99,  4.5,    -1.99,   1, 13,  9,  matTower);
   addPlatform(10.99,  4.5,    -1.99,   1, 13,  9,  matTower);
@@ -572,7 +572,6 @@
     pole.position.y = 1.5;   
     group.add(pole);
 
-    // Bandeira (começa em baixo — scaleY = 0)
     const flag = new THREE.Mesh(
       new THREE.BoxGeometry(0.8, 0.5, 0.05),
       new THREE.MeshLambertMaterial({ color: 0xff2222})
@@ -596,7 +595,6 @@
 
   function checkCheckpoints(dt) {
     for (const cp of checkpoints) {
-      // Animar a subida da bandeira
       if (cp.collected && cp.flag.position.y < 2.75) {
         cp.flag.position.y = Math.min(cp.flag.position.y + dt * 2, 2.75);
       }
@@ -741,13 +739,9 @@
 
   // ── BOTÃO JOGAR — transição do menu para o jogo ───────────────
   document.getElementById('btn-play').addEventListener('click', () => {
-    // 1. Esconde o menu de personalização
     document.getElementById('char-menu').style.display = 'none';
-    // 2. Esconde o gui (pode ser reaberto via pausa se quiseres — aqui fechamos)
     gui.domElement.style.display = 'none';
-    // 3. Mostra o hint do jogo
     document.getElementById('hint').style.display = 'block';
-    // 4. Arranca o jogo
     gameStarted = true;
     clock.start();
     renderer.domElement.requestPointerLock();
@@ -809,7 +803,7 @@
   document.addEventListener('keyup', e => { keys[e.code] = false; });
 
   // ── FÍSICA ────────────────────────────────────────────────────
-  let currentPlatform = null; // plataforma onde o jogador está pousado
+  let currentPlatform = null; 
 
   function getFloorY(x, z) {
     let highest = 0;
