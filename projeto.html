@@ -123,13 +123,15 @@
 
   <!-- ── MENU DOS COMANDOS ── -->
   <div id="controls-box">
-    <h2>Comandos disponiveis</h2>
+    <h2>Instruções</h2>
     <p><strong>W A S D</strong> — mover</p>
     <p><strong>Shift</strong> — correr</p>
     <p><strong>Espaço</strong> — saltar</p>
+    <p><strong>F</strong> — lanterna</p>
     <p><strong>Rato</strong> — mover câmara</p>
     <p><strong>Scroll</strong> — zoom</p>
     <p><strong>ESC</strong> — pausa</p>
+    <p>Clicar em Reiniciar para voltar ao ultimo checkpoint</p>
   </div>
 </div>
 
@@ -192,6 +194,8 @@
       sun.color.set(0xaaccff);
       sun.intensity = 0.25;
 
+      torchLight.intensity = torchOn ? 18 : 0;
+
       btnDayNight.textContent = '☀️ Modo dia';
     } else {
       scene.background = new THREE.Color(0x87ceeb);
@@ -201,6 +205,8 @@
 
       sun.color.set(0xffffff);
       sun.intensity = 1.5;
+
+      torchLight.intensity = torchOn ? 18 : 0;
 
       btnDayNight.textContent = '🌙 Modo noite';
     }
@@ -430,7 +436,6 @@
   addStreetLamp(-5, 5.5, -50);
   addStreetLamp(-1,  20.5, -80, Math.PI);
   addStreetLamp(-27, 37.5, -91);
-  setDayNight(false);
   // ── BRANCO ───────────────────────────────────────────────────
   addPlatform(0,   0.5,  -10,  5, 5,  1,  white);
   addPlatform(0,   1,    -17,  5, 5,  2,  white);
@@ -544,10 +549,10 @@
     { riseSpeed: 3, fallSpeed: 3, riseHeight: 10 }
   );
   const platA7 = createRisingPlatform(7, 78, -44, 25, 4, 0.5, azul_escuro,
-    { reverse: true, riseSpeed: 3, fallSpeed: 1.6, riseHeight: 9 }
+    { reverse: true, riseSpeed: 3, fallSpeed: 1.7, riseHeight: 9 }
   );
   const platA8 = createRisingPlatform(7, 78, -40, 25, 4, 0.5, azul_escuro,
-    { reverse: true, riseSpeed: 3, fallSpeed: 1.6, riseHeight: 9 }
+    { reverse: true, riseSpeed: 3, fallSpeed: 1.7, riseHeight: 9 }
   );
   addPlatform(-10,  77, -44,  5, 5, 1,  azul_claro);
 
@@ -564,7 +569,7 @@
       new THREE.CylinderGeometry(0.05, 0.05, 3, 8),
       new THREE.MeshLambertMaterial({ color: 0xaaaaaa })
     );
-    pole.position.y = 1.5;
+    pole.position.y = 1.5;   
     group.add(pole);
 
     // Bandeira (começa em baixo — scaleY = 0)
@@ -665,6 +670,19 @@
   meshLegR.position.y = -0.2;
   meshLegR.castShadow = true;
   pivotLegR.add(meshLegR);
+
+  // ── ILUMINAÇÃO DO JOGADOR ─────────────────────────────────────
+  const torchLight = new THREE.SpotLight(0xfff4cc, 0, 30, Math.PI / 9, 0.4, 1.5);
+  torchLight.position.set(0, 1.5, 0);
+  const torchTarget = new THREE.Object3D();
+  torchTarget.position.set(0, 1, -2);
+  playerGroup.add(torchTarget);
+  torchLight.target = torchTarget;
+  playerGroup.add(torchLight);
+
+  let torchOn = false;
+
+  setDayNight(false);
 
   // ── CÂMARA DE PREVIEW (usada no menu de personalização) ──────
   let previewAngle = 0;
@@ -782,6 +800,11 @@
   document.addEventListener('keydown', e => {
     if (e.code === 'Space') e.preventDefault();
     if (gameStarted && !paused) keys[e.code] = true;
+
+      if (e.code === 'KeyF') {
+        torchOn = !torchOn;
+        torchLight.intensity = torchOn ? 18 : 0;
+      }
   });
   document.addEventListener('keyup', e => { keys[e.code] = false; });
 
